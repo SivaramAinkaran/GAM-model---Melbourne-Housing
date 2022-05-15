@@ -1,0 +1,107 @@
+---
+title: "GAM Regression - Melbourne Housing"
+author: "Sivaram Ainkaran"
+date: "19/10/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(broom)
+library(tidyverse)
+library(faraway)
+library(lme4)
+library(mgcv)
+library(KernSmooth)
+library(splines)
+library(visreg)
+```
+
+```{r, echo=FALSE, include=FALSE}
+
+
+data <- readr::read_csv("melb_data.csv") %>%
+  filter(Method=="S",CouncilArea=="Melbourne",BuildingArea>0) %>% 
+  select(Price, Rooms, BuildingArea, YearBuilt, Postcode)%>%
+  drop_na() %>%
+  mutate(Postcode=as.factor(Postcode)) %>% 
+  mutate(log_price=log(Price))
+data
+
+```
+_Question 1_
+
+```{r, warning=FALSE, echo=FALSE}
+p <- ggplot(data, aes(BuildingArea, log_price)) + geom_point()
+
+
+data %>% ggplot(aes(x=Rooms, y=log_price)) + geom_point() + geom_smooth()
+data %>% ggplot(aes(x=BuildingArea, y=log_price)) + geom_point() + geom_smooth()
+data %>% ggplot(aes(x=YearBuilt, y=log_price)) + geom_point() + geom_smooth()
+data %>% ggplot(aes(x=Postcode, y=log_price)) + geom_boxplot() 
+
+```
+From these plots, we can see that "Rooms" and the response variable have a rather linear relationship with means of log_price travelling through the same line. We can see that "BuildingArea" does not have a linear relationship with the logarithm of "Price" as it folows more of a logarithmic curve. "YearBuilt" also does not have a strictly linear curve, following a more negative logarithmic curve, with alot of points scattered far from the curve. "Postcode" does not seem to have any linear effect on "log_price" with different means and variances for each postcode.
+
+
+
+_Question 2_
+```{r, echo=FALSE}
+
+fit1 <- gam(log_price ~ Rooms + poly(BuildingArea, 2, raw=TRUE) + YearBuilt + Postcode, data=data)
+
+
+summary(fit1)
+```
+We can see that in this case, "log_price" has a negative quadratic relationship with "BuildingArea" since the coefficient for the "x^2" term is -2.582*10^-5 and the coefficient for the "x" term is 0.01120. 
+
+_Question 3_
+```{r, echo=FALSE}
+coef1 <- coef(fit1)
+
+root <- -coef1[3]/(2*coef1[4])
+root
+
+```
+By taking the derivative of this quadratic with the terms above and solving it by setting this equal to 0, we get a "BuildingArea" of 216.82 square metres yielding the highest price. 
+
+
+_Question 4_
+
+
+```{r, echo=FALSE}
+
+fit_add1 <- gam(log_price ~ Rooms + s(BuildingArea) + s(YearBuilt) + Postcode, data=data)
+
+visreg(fit_add1, "BuildingArea", gg=TRUE)
+visreg(fit_add1, "YearBuilt", gg=TRUE)
+
+```
+We can see that "BuildingArea" follows a cubic curvature with an upward trend up to around 125 square meters where the price of the building stabilizes and begins to drop, followed by an increase in price yet again, at around 210 square meters. "YearBuilt" on the other hand follows an almost linear curve downwards, with prices decreasing as the year it was built increases. This could be due to the increase in material availability, better tools and better infrastructure as a whole we have to build houses today.  
+
+
+_Question 5_
+```{r, echo=FALSE}
+
+fit_add2 <- gam(log_price ~ Rooms + s(BuildingArea) + YearBuilt + Postcode, data=data)
+anova(fit_add1, fit_add2, test="F")
+
+```
+
+Since the p-value obtained from this F-test (0.1854) is much greater than 0.05, we do not reject the null hypothesis and we can say that "YearBuilt" is not significantly non-linear.
+
+
+_Question 6_
+
+```{r, echo=FALSE}
+
+house1 <- predict(fit_add2, data.frame(Rooms=4, YearBuilt=1980, Postcode=3003, BuildingArea=200))
+house2 <- predict(fit_add2, data.frame(Rooms=4, YearBuilt=1980, Postcode=3003, BuildingArea=250))
+house_pricediff <- exp(house2)-exp(house1)
+data.frame(house_pricediff)
+
+```
+Here we use "fit_add2" with the linear term for "YearBuilt" since it is not significantly non-linear. We can see that the predicted difference in price for these 2 houses is $209,266.
+
